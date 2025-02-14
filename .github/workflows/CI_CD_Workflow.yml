@@ -40,6 +40,9 @@ jobs:
         key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
+        # Step 1.5: Verify the JAR file is created
+    - name: Verify JAR File
+      run: ls -l build/libs/
 
   # Step 2: Build and Push Docker Image
   dockerize:
@@ -61,8 +64,8 @@ jobs:
     # Step 2.3: Build Docker image
     - name: Build Docker Image
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} .
-        docker tag ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:latest
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:v1 .
+#        docker tag ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:latest
 
     # Step 2.4: Push Docker image
     - name: Push Docker Image

@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: kubernetes-demo
+  datasource:
+    username: ${DB_USER:your_user}
+    password: ${DB_PASSWORD:your_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ecommerce}?useSSL=false
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+

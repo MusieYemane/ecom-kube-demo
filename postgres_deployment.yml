@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres-container
+          image: postgres:15 # Use PostgreSQL version 15, change as needed
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "your_user" # Replace with your username
+            - name: POSTGRES_PASSWORD
+              value: "your_password" # Replace with a strong password
+            - name: POSTGRES_DB
+              value: "ecommerce" # Replace with your desired database name
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgres-storage
+      volumes:
+        - name: postgres-storage
+          emptyDir: {} # Use a Persistent Volume Claim in production environments for data persistence
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  labels:
+    app: postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: postgres
+  type: ClusterIP

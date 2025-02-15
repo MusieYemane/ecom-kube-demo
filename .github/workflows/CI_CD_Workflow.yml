@@ -1,32 +1,17 @@
-name: CI/CD Workflow
-
-on:
-  push:
-    branches:
-      - main
-      - 'release/**' # Trigger on release branches
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch: # Manual trigger
-
 jobs:
   # Step 1: Build and Test the Application
   build:
     runs-on: ubuntu-latest
     steps:
-      # Step 1.1: Check out the code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 1.2: Set up Java (JDK 21 for the Spring Boot app)
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
           java-version: 21
           distribution: 'temurin'
 
-      # Step 1.3: Cache Gradle Dependencies
       - name: Cache Gradle Dependencies
         uses: actions/cache@v3
         with:
@@ -35,12 +20,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # Step 1.4: Build the project and run tests (skip tests, if necessary)
       - name: Build Application with Gradle
-        run: ./gradlew build -x test
+        run: ./gradlew bootJar -x test
 
-      # Step 1.5: Verify the JAR file is created
-      - name: Verify JAR File
+      - name: Verify Build Output
         run: ls -l build/libs/
 
   # Step 2: Build and Push Docker Image
@@ -48,57 +31,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      # Step 2.1: Check out the code (required for Docker build context)
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Prepare Docker Context
-        run: |
-          mkdir -p docker-context
-          cp build/libs/kubernetes-demo-0.0.1-SNAPSHOT.jar docker-context/  # Copy JAR file for Docker
-      # Step 2.2: Log in to Docker Hub
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 2.3: Build Docker Image
+      - name: Prepare Docker Context
+        run: |
+          mkdir -p docker-context
+          cp build/libs/*.jar docker-context/
+
       - name: Build Docker Image
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} docker-context
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} .
           docker tag ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:latest
 
-      # Step 2.4: Push Docker Image
       - name: Push Docker Image
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }}
           docker push ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:latest
-
-  # Step 3: Deploy to Kubernetes
-  deploy:
-    runs-on: ubuntu-latest
-    needs: dockerize
-    steps:
-      # Step 3.1: Check out the code
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      # Step 3.2: Set up kubectl
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-
-      # Step 3.3: Authenticate Kubernetes cluster using KUBECONFIG
-      - name: Set up kubeconfig
-        env:
-          KUBECONFIG: ${{ secrets.KUBECONFIG_DATA }}
-        run: |
-          echo "${KUBECONFIG}" > kubeconfig
-          export KUBECONFIG=kubeconfig
-
-      # Step 3.4: Deploy PostgreSQL and the application
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f postgres_deployment.yml
-          kubectl apply -f ecommerce_deployment.yml

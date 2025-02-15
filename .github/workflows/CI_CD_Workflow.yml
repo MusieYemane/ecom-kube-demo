@@ -1,6 +1,17 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/ecommerce-app
+
 jobs:
-  # Step 1: Build and Test the Application
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -9,48 +20,127 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v3
         with:
-          java-version: 21
+          java-version: '21'
           distribution: 'temurin'
+          cache: gradle
 
-      - name: Cache Gradle Dependencies
-        uses: actions/cache@v3
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
         with:
-          path: ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          gradle-version: wrapper
 
-      - name: Build Application with Gradle
-        run: ./gradlew bootJar -x test
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Verify Build Output
-        run: ls -l build/libs/
+      - name: Build with Gradle
+        run: ./gradlew clean build -x test
 
-  # Step 2: Build and Push Docker Image
-  dockerize:
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: build/libs/*.jar
+
+  docker-build-push:
+    needs: build-and-test
     runs-on: ubuntu-latest
-    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Log in to Docker Hub
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+          path: build/libs
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Prepare Docker Context
-        run: |
-          mkdir -p docker-context
-          cp build/libs/*.jar docker-context/
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
-      - name: Build Docker Image
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} .
-          docker tag ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:latest
+  deploy:
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    environment: production
 
-      - name: Push Docker Image
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install yq
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:${{ github.sha }}
-          docker push ${{ secrets.DOCKER_USERNAME }}/ecommerce-app:latest
+          wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+      - name: Update Kubernetes manifests
+        run: |
+          yq eval ".spec.template.spec.containers[0].image = \"${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}\"" -i ecommerce_deployment.yml
+          yq eval ".spec.template.spec.containers[0].env[0].value = \"${{ secrets.DB_USER }}\"" -i ecommerce_deployment.yml
+          yq eval ".spec.template.spec.containers[0].env[1].value = \"${{ secrets.DB_PASSWORD }}\"" -i ecommerce_deployment.yml
+          yq eval ".spec.template.spec.containers[0].env[2].value = \"${{ secrets.DB_HOST }}\"" -i ecommerce_deployment.yml
+          yq eval ".spec.template.spec.containers[0].env[3].value = \"${{ secrets.DB_PORT }}\"" -i ecommerce_deployment.yml
+          yq eval ".spec.template.spec.containers[0].env[4].value = \"${{ secrets.DB_NAME }}\"" -i ecommerce_deployment.yml
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > kubeconfig
+          chmod 600 kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f ecommerce_deployment.yml
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/ecommerce-deployment -n default --timeout=180s
+
+      - name: Clean up
+        if: always()
+        run: rm -f kubeconfig
+
+  post-deploy:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Check deployment health
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > kubeconfig
+          chmod 600 kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Verify service health
+        run: |
+          kubectl get pods -l app=ecommerce -o wide
+          kubectl get services ecommerce-service
+
+      - name: Clean up
+        if: always()
+        run: rm -f kubeconfig

@@ -62,7 +62,6 @@ jobs:
 
       - name: Update Kubernetes Deployment
         run: |
-#          sed -i "s|musie25/ecommerce-app:v1|musie25/ecommerce-app:${{ github.sha }}|g" ecommerce_deployment.yml
           kubectl apply -f ecommerce_deployment.yml
 
       - name: Restart Pods

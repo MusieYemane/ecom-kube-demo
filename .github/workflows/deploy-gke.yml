@@ -70,6 +70,7 @@ jobs:
       - name: Update Kubernetes Deployment
         run: |
           sed -i "s|musie25/ecommerce-app:v1|us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecommerce-repo/ecommerce-app:${{ github.sha }}|g" ecommerce_deployment.yml
+          kubectl apply -f postgres_deployment.yml
           kubectl apply -f ecommerce_deployment.yml
 
       - name: Restart Deployment

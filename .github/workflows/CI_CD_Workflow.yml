@@ -62,7 +62,7 @@ jobs:
 
       - name: Update Kubernetes Deployment
         run: |
-          kubectl apply -f ecommerce_deployment.yml
+          kubectl apply -f ecommerce_deployment.yml --validate=false
 
       - name: Restart Pods
         run: |

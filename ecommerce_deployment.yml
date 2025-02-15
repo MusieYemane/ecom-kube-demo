@@ -52,7 +52,7 @@ metadata:
   labels:
     app: ecommerce
 spec:
-  type: NodePort # ClusterIP: if Internal service; Change to LoadBalancer or NodePort if exposing externally
+  type: LoadBalancer # ClusterIP: if Internal service; Change to LoadBalancer or NodePort if exposing externally
   ports:
     - port: 8080
       targetPort: 8080

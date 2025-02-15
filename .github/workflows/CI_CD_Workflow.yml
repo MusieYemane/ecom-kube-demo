@@ -1,0 +1,69 @@
+#name: CI/CD Pipeline
+#
+#on:
+#  push:
+#    branches:
+#      - main  # Trigger on push to main branch
+#  pull_request:
+#    branches:
+#      - main
+#
+#jobs:
+#  build:
+#    name: Build and Push Docker Image
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Checkout Code
+#        uses: actions/checkout@v3
+#      - name: Set Up JDK
+#        uses: actions/setup-java@v3
+#        with:
+#          distribution: 'temurin'
+#          java-version: '21'
+#
+#      - name: Build Application
+#        run: ./gradlew build -x test --no-daemon  # OR mvn clean package -DskipTests
+#
+#      - name: Log in to Docker Hub
+#        uses: docker/login-action@v2
+#        with:
+#          username: ${{ secrets.DOCKER_USERNAME }}
+#          password: ${{ secrets.DOCKER_PASSWORD }}
+#
+#      - name: Build Docker Image
+#        run: |
+#          docker build -t musie25/ecommerce-app:${{ github.sha }} .
+#          docker tag musie25/ecommerce-app:${{ github.sha }} musie25/ecommerce-app:latest
+#
+#      - name: Push Docker Image
+#        run: |
+#          docker push musie25/ecommerce-app:${{ github.sha }}
+#          docker push musie25/ecommerce-app:latest
+#
+#  deploy:
+#    name: Deploy to Kubernetes
+#    needs: build
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#      - name: Checkout Code
+#        uses: actions/checkout@v3
+#
+#      - name: Setup kubectl
+#        uses: azure/setup-kubectl@v3
+#        with:
+#          version: 'latest'
+#
+#      - name: Configure Kubeconfig
+#        run: |
+#          echo "${{ secrets.KUBECONFIG_DATA }}" > kubeconfig.yaml
+#          export KUBECONFIG=kubeconfig.yaml
+#
+#      - name: Update Kubernetes Deployment
+#        run: |
+#          kubectl apply -f ecommerce_deployment.yml
+#
+#      - name: Restart Pods
+#        run: |
+#          kubectl rollout restart deployment ecommerce-deployment

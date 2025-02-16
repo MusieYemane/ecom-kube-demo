@@ -13,8 +13,7 @@ public class LoveController {
 
     private final List<String> backgroundImages = Arrays.asList(
             "/images/background1.jpeg",
-            "/images/background2.jpeg",
-            "/images/background3.jpeg");
+            "/images/background2.jpeg");
 
     private final List<String> lovePhrases = Arrays.asList(
             "My Sweet Honey, even after 5 years apart, my love for you grows stronger every day. You are my forever.",
@@ -40,7 +39,7 @@ public class LoveController {
     );
     private final Random random = new Random();
 
-    @GetMapping("/")
+    @GetMapping("/mylove/honey")
     public String getRandomLovePhrase(Model model) {
         // Select a random love phrase
         String randomPhrase = lovePhrases.get(random.nextInt(lovePhrases.size()));

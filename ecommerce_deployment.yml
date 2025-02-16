@@ -5,7 +5,7 @@ metadata:
   labels:
     app: ecommerce
 spec:
-  replicas: 2 # Number of pod
+  replicas: 2 #Number of pod
   selector:
     matchLabels:
       app: ecommerce
